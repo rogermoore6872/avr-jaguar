@@ -11,8 +11,9 @@ class DigitalInput
 {
 public:
     DigitalInput(const char *name, byte pin, bool latch=false) :
-        m_name(name), m_pin(pin), m_latch(latch)
+        m_name(name), m_pin(pin)
     {
+        set_latch(latch);
     }
 
     void setup(void)
@@ -24,6 +25,7 @@ public:
     }
 
     bool get_state(void) const { return m_state; }
+    void set_latch(bool latch) { m_latch = latch; }
 
     bool loop(bool debug=false)
     {
@@ -59,7 +61,7 @@ public:
 private:
     const char* m_name; // Name of button    
     const byte m_pin;   // Arduino digital input pin
-    const bool m_latch; // When true, button state if latched until next press
+    bool m_latch;       // When true, button state if latched until next press
   
     bool m_state;       // Current logical state of button
     bool m_read;        // State of last read
@@ -207,8 +209,6 @@ public:
         Serial.print(m_name);
         Serial.print(": ");
         Serial.print(m_state ? "HIGH " : "LOW ");
-        Serial.print(m_start);
-        Serial.print(" ");
         Serial.print(m_period);
         Serial.print(" ");
         Serial.print(m_on);
@@ -216,7 +216,7 @@ public:
         Serial.println();
     }
 
-private:
+protected:
     const char* m_name;     // A name
     const byte m_pin;       // Arduino IO pin number
     unsigned long m_period; // Period in microseconds
@@ -231,32 +231,48 @@ class JaguarPWM : public PWM
 public:
     JaguarPWM(const char *name, byte pin, JoystickShield* joystick) :
         PWM(name, pin), m_joystick(joystick),
-//        m_reverse(670), m_neutral(1500), m_forward(2330)    // TODO: figure out what values work? values in use are for LED troubleshooting
-        m_reverse(67000), m_neutral(150000), m_forward(233000)
+        m_reverse(670), m_neutral(1454), m_forward(2330), m_period(10000)
     {
-        set_period(m_neutral*2, m_neutral);
+        m_increment = false;
+        set_period(m_period, m_neutral);
+
     }
 
     void loop(bool debug=false)
     {
-        unsigned long pulse = m_neutral;
+        // TODO: decide how to control the pulse width via joystick
         if( m_joystick->m_b.get_state() )
-            pulse = m_forward;
+        {   if( !m_increment )
+            {
+                m_increment = true;
+                m_on += 1;
+                if( debug ) PWM::print();
+            }
+        }
         else if( m_joystick->m_d.get_state() )
-            pulse = m_reverse;
+        {
+            if( !m_increment )
+            {
+                m_increment = true;
+                m_on -= 1;
+                if( debug ) PWM::print();
+            }
+        }
+        else
+            m_increment = false;
 
-        set_period(pulse*2, pulse);
         PWM::loop();
     }
-
 
 private:
     JoystickShield* const m_joystick;
 
-    const unsigned long m_reverse;   // Full speed reverse pulse width in microseonds
-    const unsigned long m_neutral;   // Neutral
-    const unsigned long m_forward;   // Full speed forward
+    bool m_increment;   // True if pulse width has just been incremented
 
+    const unsigned long m_reverse;  // Full speed reverse pulse width in microseonds
+    const unsigned long m_neutral;  // Neutral
+    const unsigned long m_forward;  // Full speed forward
+    const unsigned long m_period;   // Servo signal period
 };
 
 
@@ -278,7 +294,7 @@ void setup()
 void loop()
 {
    
-    Joystick.loop(true);
+    Joystick.loop();
     SystemLED.loop();
-    Jaguar.loop();
+    Jaguar.loop(true);
 }
